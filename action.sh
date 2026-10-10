@@ -1,7 +1,13 @@
 #!/system/bin/sh
 # Кнопка "Действие" в KernelSU: выбор толщины.
 
-MODDIR=${0%/*}
+if [ -n "$MODPATH" ]; then
+    MODDIR="$MODPATH"
+else
+    MODDIR="${0%/*}"
+    [ "$MODDIR" = "$0" ] && MODDIR="."
+fi
+
 . "$MODDIR/common.sh"
 
 # Значение, выбранное пользователем. Глобальная, а не stdout:

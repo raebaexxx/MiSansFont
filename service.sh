@@ -2,7 +2,13 @@
 # Применяет вес при загрузке. Файлы шрифта монтирует magic mount сам,
 # к началу работы zygote, поэтому дополнительных действий не нужно.
 
-MODDIR=${0%/*}
+if [ -n "$MODPATH" ]; then
+    MODDIR="$MODPATH"
+else
+    MODDIR="${0%/*}"
+    [ "$MODDIR" = "$0" ] && MODDIR="."
+fi
+
 . "$MODDIR/common.sh"
 
 ensure_state
