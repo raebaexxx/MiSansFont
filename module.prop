@@ -1,0 +1,6 @@
+id=misans
+name=MiSans System Font
+version=v1.0
+versionCode=1
+author=raebaexxx
+description=MiSans как системный шрифт вместо Roboto. Прямой, полужирный, кириллица из одного файла. Вес настраивается через Settings.Secure.FONT_WEIGHT_ADJUSTMENT (кнопка "Действие" в KernelSU).
