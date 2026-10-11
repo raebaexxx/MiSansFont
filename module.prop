@@ -1,6 +1,6 @@
 id=misans
 name=MiSans System Font
-version=v3.2
-versionCode=32
+version=v3.3
+versionCode=33
 author=raebaexxx
 description=MiSans как системный шрифт вместо Roboto. Меняется одно семейство sans-serif в /system/etc/fonts.xml, остальные варианты подхватываются алиасами. Толщина через Settings.Secure.FONT_WEIGHT_ADJUSTMENT.

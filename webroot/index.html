@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MiSans — толщина</title>
+<style>
+  :root {
+    --bg: #121212;
+    --card: #1e1e1e;
+    --card2: #262626;
+    --fg: #ececec;
+    --dim: #9a9a9a;
+    --acc: #7cc4ff;
+    --acc2: #4f9de0;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f4f4f6; --card:#fff; --card2:#eeeef2; --fg:#16161a; --dim:#6a6a72; --acc:#1a73e8; --acc2:#1558b0; }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+    font-family: system-ui, -apple-system, sans-serif; }
+  body { padding: 20px 18px 32px; max-width: 640px; margin: 0 auto; }
+
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 22px; line-height: 1.45; }
+
+  .card { background: var(--card); border-radius: 18px; padding: 20px; margin-bottom: 16px; }
+
+  .val { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .val b { font-size: 42px; font-weight: 300; line-height: 1; letter-spacing: -1px; }
+  .val span { color: var(--dim); font-size: 13px; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%;
+    height: 34px; background: transparent; margin: 10px 0 2px; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(90deg, var(--acc2) var(--p, 100%), var(--card2) var(--p, 100%)); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--acc); margin-top: -10px; border: 4px solid var(--card); }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--card2); }
+  input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--acc2); }
+  input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border-radius: 50%;
+    background: var(--acc); border: 4px solid var(--card); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { background: var(--card2); color: var(--fg); border: 0; border-radius: 999px;
+    padding: 9px 15px; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed=true] { background: var(--acc); color: #fff; }
+
+  .btn { width: 100%; background: var(--acc); color: #fff; border: 0; border-radius: 14px;
+    padding: 15px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+  .btn.ghost { background: var(--card2); color: var(--fg); }
+  .btn:disabled { opacity: .55; }
+
+  .prev { font-family: sans-serif; line-height: 1.35; }
+  .prev .a { font-size: 30px; }
+  .prev .b { font-size: 19px; margin-top: 8px; }
+  .prev .c { font-size: 13px; color: var(--dim); margin-top: 8px; }
+  .prev mark { background: var(--acc); color: #fff; border-radius: 4px; padding: 0 4px; }
+
+  .rows { font-size: 13px; color: var(--dim); }
+  .rows div { display: flex; justify-content: space-between; padding: 5px 0;
+    border-bottom: 1px solid var(--card2); }
+  .rows div:last-child { border: 0; }
+  .rows b { color: var(--fg); font-weight: 500; }
+
+  .st { margin-top: 10px; font-size: 12px; color: var(--dim); min-height: 17px; }
+  .st.err { color: #ff8a80; }
+</style>
+</head>
+<body>
+
+<h1>MiSans — толщина шрифта</h1>
+<div class="sub">
+  Сдвиг поверх базовой полужирной начертания. Ось MiSans кончается на 700,
+  поэтому всё, что выше, упирается в потолок и выглядит одинаково.
+</div>
+
+<div class="card">
+  <div class="val"><b id="num">300</b><span id="hint">максимум</span></div>
+  <input type="range" id="sl" min="0" max="300" step="10" value="300">
+  <div class="chips" id="chips"></div>
+</div>
+
+<button class="btn" id="apply">Применить</button>
+<button class="btn ghost" id="reload">Обновить значение</button>
+<div class="st" id="st"></div>
+
+<div class="card">
+  <div class="prev">
+    <div class="a">Толщина текста <mark>сейчас</mark></div>
+    <div class="b">Обычный текст, 19px, как в списках и чатах</div>
+    <div class="c">Подпись 13px — как в настройках и подписях. Наведи и двигай ползунок.</div>
+  </div>
+</div>
+
+<div class="card rows" id="rows"></div>
+
+<script>
+let n = 0;
+function exec(cmd) {
+  return new Promise((res, rej) => {
+    const name = 'kcb_' + Date.now() + '_' + (n++);
+    window[name] = (errno, stdout, stderr) => { delete window[name]; res({errno, stdout, stderr}); };
+    try { ksu.exec(cmd, '{}', name); }
+    catch (e) { delete window[name]; rej(e); }
+  });
+}
+const toast = m => { try { ksu.toast(m); } catch (e) {} };
+const $ = id => document.getElementById(id);
+
+let cur = 300;
+
+function render() {
+  const v = +$('sl').value;
+  $('num').textContent = v;
+  $('sl').style.setProperty('--p', (v / 300 * 100) + '%');
+  $('hint').textContent = v >= 300 ? 'максимум, ось кончается' : (v === 0 ? 'только базовый сдвиг' : 'поверх базового');
+  document.querySelectorAll('.chip').forEach(c =>
+    c.setAttribute('aria-pressed', String(+c.dataset.v === v)));
+}
+
+function rows() {
+  const v = +$('sl').value;
+  const cap = n => Math.min(700, Math.max(150, n));
+  const d = [
+    ['тонкий 100', cap(100 + v)],
+    ['лёгкий 300', cap(300 + v)],
+    ['обычный 400', cap(400 + v)],
+    ['средний 500', cap(500 + v)],
+    ['жирный 700', cap(700 + v)],
+  ];
+  $('rows').innerHTML = d.map(([k, w]) =>
+    `<div><span>${k}</span><b>→ ${w}</b></div>`).join('');
+}
+
+function buildChips() {
+  const vals = [0, 100, 200, 300];
+  $('chips').innerHTML = vals.map(v =>
+    `<button class="chip" data-v="${v}" aria-pressed="false">+${v}</button>`).join('');
+  $('chips').onclick = e => {
+    if (!e.target.classList.contains('chip')) return;
+    $('sl').value = e.target.dataset.v;
+    render(); rows();
+  };
+}
+
+async function readCur() {
+  try {
+    const r = await exec('cat /data/adb/misans/weight 2>/dev/null');
+    const v = parseInt((r.stdout || '').trim(), 10);
+    if (!isNaN(v) && v >= 0 && v <= 300) { cur = v; $('sl').value = v; }
+  catch (e) {}
+  render(); rows();
+}
+
+async function apply() {
+  const v = +$('sl').value;
+  $('apply').disabled = true;
+  $('st').className = 'st';
+  $('st').textContent = 'Применяю…';
+  try {
+    const r = await exec('sh /data/adb/modules/misans/action.sh set ' + v);
+    const ok = +r.errno === 0;
+    $('st').className = 'st' + (ok ? '' : ' err');
+    $('st').textContent = ok
+      ? 'Готово: ' + v + '. SystemUI перезапущен.'
+      : 'Ошибка ' + r.errno + ': ' + (r.stderr || r.stdout || 'нет вывода');
+    if (ok) { cur = v; toast('Толщина: +' + v); }
+  } catch (e) {
+    $('st').className = 'st err';
+    $('st').textContent = 'Не удалось выполнить: ' + e;
+  }
+  $('apply').disabled = false;
+}
+
+buildChips();
+$('sl').addEventListener('input', () => { render(); rows(); });
+$('apply').onclick = apply;
+$('reload').onclick = readCur;
+
+if (typeof ksu === 'undefined') {
+  $('st').className = 'st err';
+  $('st').textContent = 'Страница открыта вне KernelSU — команды недоступны.';
+  render(); rows();
+} else {
+  try { ksu.enableEdgeToEdge && ksu.enableEdgeToEdge(true); } catch (e) {}
+  readCur();
+}
+</script>
+</body>
+</html>
