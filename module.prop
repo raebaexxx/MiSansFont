@@ -1,6 +1,6 @@
 id=misans
 name=MiSans System Font
-version=v4.0
-versionCode=50
+version=v4.1
+versionCode=51
 author=raebaexxx
 description=MiSans как системный шрифт вместо Roboto. Толщина — сдвиг веса прямо в конфигурации, работает во всех приложениях. Ползунок в WebUI, требуется перезагрузка.

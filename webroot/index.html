@@ -94,7 +94,7 @@
 
 <div class="card rows" id="rows"></div>
 
-<div class="ver" id="ver">webroot v4.0 · загружено</div>
+<div class="ver" id="ver">webroot v4.1 · загружено</div>
 
 <script>
 let cbSeq = 0;
@@ -180,7 +180,7 @@ function save(rebootAfter) {
   $('st').className = 'st';
   $('st').textContent = 'Сохраняю…';
   exec('sh /data/adb/modules/misans/action.sh set ' + v).then(function (r) {
-    $('st').className = 'st' (+r.errno === 0 ? '' : ' err');
+    $('st').className = 'st' + (+r.errno === 0 ? '' : ' err');
     if (+r.errno !== 0) {
       $('st').textContent = 'Ошибка ' + r.errno + ': ' + (r.stderr || r.stdout || 'нет вывода');
       $('apply').disabled = false;
@@ -213,7 +213,7 @@ if (typeof ksu === 'undefined') {
 } else {
   try { if (ksu.enableEdgeToEdge) ksu.enableEdgeToEdge(true); } catch (e) {}
   readCur();
-  $('ver').textContent = 'webroot v4.0 · скрипт выполнен';
+  $('ver').textContent = 'webroot v4.1 · скрипт выполнен';
 }
 </script>
 </body>
