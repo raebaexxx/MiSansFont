@@ -1,27 +1,26 @@
 #!/system/bin/sh
-# Применяет сдвиг веса и подменяет файлы /product через VFS-правила.
+# Applies the weight shift and substitutes /product through VFS rules.
 #
-# Скрипт выполняется на этапе post-fs-data, то есть ДО чтения конфигурации
-# шрифтов zygote. Проверять тут оверлей бессмысленно (его ещё нет), а вот
-# подменить файлы в /product — в самый раз.
+# Runs at post-fs-data, before zygote reads the font configuration. Checking
+# the overlay here would be pointless — it does not exist yet — but replacing
+# /product files is exactly right here.
 #
-# Зачем нужен /product: PixelOS держит переопределение google-sans* в
-# /product/etc/fonts_customization.xml, и FontListParser выкидывает одноимённые
-# семейства из /system/etc/fonts.xml:
+# Why /product matters: PixelOS keeps the google-sans* override in
+# /product/etc/fonts_customization.xml, and FontListParser drops same-named
+# families from /system/etc/fonts.xml:
 #
 #   if (!oemNamedFamilies.containsKey(name)) {
 #       // The OEM customization overrides system named family.
 #
-# Интерфейс берёт config_bodyFontFamily = google-sans-text (RRO-оверлей тоже
-# в /product), поэтому без этой подмены MiSans до него не доходит.
+# The interface asks for config_bodyFontFamily = google-sans-text (the RRO
+# overlay is in /product too), so without this the shift never reaches it.
 #
-# Обычными средствами модуля /product не перекрыть: extra_mount в HybridMount
-# требует, чтобы не было соответствующей записи в /system, а /system/product —
-# симлинк. VFS-правила работают на уровне ядра и этой проверки не имеют.
+# A module cannot overlay /product the usual way: extra_mount in HybridMount
+# requires no matching /system entry, and /system/product is a symlink. VFS
+# rules redirect paths in the kernel and are not subject to that check.
 #
-# ВНИМАНИЕ: составной образец вида "cond && /regex/ { }" часть awk его не
-# разбирает (gawk 5.4.1 — syntax error, toybox на устройстве — иначе).
-# Все условия написаны через if, где такой ошибки нет.
+# NOTE: a compound awk pattern such as "cond && /re/ { }" is rejected by some
+# awk builds (gawk 5.4.1 on the build host). Every condition below is an if.
 
 MODDIR=${0%/*}
 [ -z "$MODPATH" ] && [ "$MODDIR" = "$0" ] && MODDIR="."
@@ -35,8 +34,8 @@ UNIFY_FILE="$STATE/unify"
 MIN_AXIS=150
 MAX_AXIS=700
 
-# Каталог для файлов, на которые ссылаются правила. /data/adb закрыт от
-# zygote, а /data/cache принадлежит системе: root пишет, zygote читает.
+# Where the substituted files live. /data/adb is unreachable for zygote while
+# /data/cache belongs to system: root writes, zygote reads.
 SERVE=/data/cache/misans
 
 HYBRID=/data/adb/modules/hybrid_mount/hybrid-mount
@@ -49,9 +48,9 @@ case "$SHIFT" in
 esac
 [ "$SHIFT" -gt 300 ] && SHIFT=300
 
-# Прибавляет сдвиг к wght внутри перечисленных семейств. Вес берётся из
-# атрибута weight того же элемента <font>: начертания объявлены явно, поэтому
-# сдвигать нужно именно значение оси, а не номер начертания.
+# Adds the shift to wght inside the named families. The weight comes from the
+# weight attribute of the same <font>: faces are declared explicitly, so it is
+# the axis value that has to move, not the face index.
 shift_targets() {
     list="$1"
     file="$2"
@@ -70,9 +69,9 @@ shift_targets() {
                 }
             }
             if (keep && index($0, "<font") > 0) {
-                # -1 = веса у начертания нет. Так оформлены часы:
-                # <font> без атрибутов. Тогда берётся текущее значение оси,
-                # иначе w утекал бы из предыдущего семейства.
+                # -1 means the face has no weight attribute. The clock is
+                # written that way, as a bare <font>; the existing axis value
+                # is used instead, otherwise w leaks from the previous family.
                 w = -1
                 if (match($0, /weight="[0-9]+"/)) {
                     w = substr($0, RSTART + 8, RLENGTH - 9) + 0
@@ -94,9 +93,10 @@ shift_targets() {
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 
-# То же, но отбор по ФАЙЛУ, а не по имени семейства. Нужно для OEM-конфига:
-# интерфейс просит variable-* — это 18 семейств, и список имён пришлось бы
-# вести вручную. Начертание опознаётся по имени файла в теге <font>.
+# Same shift, selected by file rather than by family name. Needed for the OEM
+# config: the interface asks for variable-*, which is 18 families. Listing them
+# by hand would mean forgetting a new one, as v5.0 did. A face is recognised by
+# the file named in its <font> tag.
 shift_by_file() {
     name="$1"
     file="$2"
@@ -125,9 +125,9 @@ shift_by_file() {
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 
-# Тот же сдвиг, но для семейства sans-serif в конфигах /system.
-# Сдвигается КОПИЯ эталона: иначе операция не идемпотентна и следующий
-# запуск уже не сможет вернуть исходные значения.
+# The same shift for sans-serif in the /system configs. A COPY of the template
+# is shifted: editing the template in place is not idempotent and the next boot
+# could no longer restore the original values.
 rewrite_sans() {
     for name in fonts.xml font_fallback.xml; do
         tpl="$MODDIR/templates/$name"
@@ -138,9 +138,9 @@ rewrite_sans() {
     done
 }
 
-# --- подмена /product через VFS ------------------------------------------
-# Правила не сохраняются на диск: если что-то пойдёт не так, обычная
-# перезагрузка возвращает стоковое состояние, ничего чистить не нужно.
+# --- /product substitution via VFS ----------------------------------------
+# Rules are runtime-only and never written to disk: if anything goes wrong, a
+# plain reboot restores stock state and there is nothing to clean up.
 serve_product() {
     [ "$(get_unify)" = "1" ] || return 0
     [ -x "$HYBRID" ] || return 0
@@ -155,9 +155,9 @@ serve_product() {
 
     shift_by_file "GoogleSans-Regular.ttf" "$SERVE/fonts_customization.xml"
 
-    # Права и контекст — ПОСЛЕ сдвига. shift_by_file перезаписывает файл
-    # через mv, и на новом файле метки были бы уже не те: корень и
-    # cache_file вместо system. zygote читает из своего SELinux-домена.
+    # Ownership and context go AFTER the shift. shift_by_file rewrites the file
+    # through mv, and the new file would otherwise be root-owned and cache_file
+    # instead of system_file. zygote reads it from its own SELinux domain.
     chown -R 1000:1000 "$SERVE" 2>/dev/null
     chmod 0755 "$SERVE"
     chmod 0644 "$SERVE/fonts_customization.xml" "$SERVE/GoogleSans-Regular.ttf"

@@ -1,9 +1,9 @@
 #!/system/bin/sh
-# Применение сдвига — в post-fs-data.sh, до монтирования.
+# Late-start check. The shift itself is applied in post-fs-data.sh.
 #
-# Здесь только проверка контекста SELinux: если файл шрифта не system_file,
-# zygote не прочтёт конфигурацию и FontManagerService уронит SystemServer.
-# Этот сценарий однажды ломал загрузку телефона, поэтому проверка нужна.
+# This only repairs the SELinux context. If the font file is not system_file,
+# zygote cannot read the font configuration and FontManagerService takes
+# SystemServer down with it, so the check stays.
 
 if [ -n "$MODPATH" ]; then
     MODDIR="$MODPATH"
@@ -16,14 +16,10 @@ fi
 
 mkdir -p /data/adb/misans
 
-fix_context() {
-    want=u:object_r:system_file:s0
-    got=$(ls -Z /system/fonts/Roboto-Regular.ttf 2>/dev/null | awk '{print $NF}')
-    [ "$got" = "$want" ] && return 0
+want=u:object_r:system_file:s0
+got=$(ls -Z /system/fonts/Roboto-Regular.ttf 2>/dev/null | awk '{print $NF}')
+if [ "$got" != "$want" ]; then
     chcon "$want" "$MODDIR/system/fonts/Roboto-Regular.ttf" 2>/dev/null
-    echo "контекст шрифта был ${got:-неизвестен}, исправлен на system_file" \
+    echo "font context was ${got:-unknown}, set to system_file" \
         > /data/adb/misans/last_error
-    return 1
-}
-
-fix_context || true
+fi

@@ -1,138 +1,214 @@
 # MiSans System Font
 
-Модуль для KernelSU / Magisk: системный шрифт Android меняется с Roboto на **MiSans**.
+KernelSU module that replaces Roboto with **MiSans** system-wide on PixelOS —
+apps, the PixelOS interface and the status bar clock.
 
-Прямые штрихи вместо закруглённых, кириллица из одного файла, толщина
-регулируется ползунком и работает во всех приложениях.
+Straight strokes instead of rounded ones, Latin and Cyrillic from a single
+file, and a weight slider that reaches every app.
 
----
+## Requirements
 
-## Как устроено
+- PixelOS on Xiaomi 13 (fuxi) or another device with the PixelOS gsans overlay
+- KernelSU / Magisk with **HybridMount** — the interface substitution runs on
+  its VFS backend
+- A reboot after changing the weight
 
-```
-system/fonts/Roboto-Regular.ttf      MiSans под именем Roboto
-system/etc/font_fallback.xml         семейство sans-serif
-system/etc/fonts.xml                 то же в легаси-формате
-post-fs-data.sh                      применяет сохранённый сдвиг
-```
+The interface substitution can be turned off, see below. Everything else works
+without HybridMount.
 
-`Roboto-Regular.ttf` используется семействами `sans-serif`, `roboto`,
-`sans-serif-condensed` и общим запасным шрифтом — то есть покрывает всю систему.
+## Install
 
-## Почему толщина задаётся в конфигурации, а не настройкой
-
-В AOSP есть `Settings.Secure.FONT_WEIGHT_ADJUSTMENT`, и `TextView` складывает
-его с осью `wght`:
-
-```java
-// frameworks/base/core/java/android/widget/TextView.java
-public void setTypeface(@Nullable Typeface tf) {
-    if (mFontWeightAdjustment != 0 && ...) {
-        int newWeight = Math.min(Math.max(tf.getWeight() + mFontWeightAdjustment, ...), FONT_WEIGHT_MAX);
-```
-
-Два ограничения сделали его непригодным как единственный механизм:
-
-**1. Он не везде применяется.** Срабатывает только на этом пути. Приложения,
-задающие шрифт мимо `TextView.setTypeface()`, его не видят.
-
-**2. Он только добавляет.** Значение складывается поверх веса из конфигурации.
-Если там уже стоит сдвиг, нижняя граница ползунка поднимается, и опустить
-толщину ниже нельзя. При сдвиге 200 обычный текст рисуется как 600, и ползунок
-от 0 до 300 даёт лишь 600…700 — почти неразличимо.
-
-Поэтому сдвиг пишется прямо в конфигурацию. Он работает у всех, кто берёт
-системный шрифт, и даёт полный диапазон.
-
-## Почему это в `post-fs-data.sh`
-
-Порядок загрузки с metamodule HybridMount:
+Flash the release zip in KernelSU or Magisk, then reboot.
 
 ```
-ksud::cli: command: PostFsData
-  exec <модуль>/post-fs-data.sh          ← наши скрипты
-  ksud::metamodule: Executing mount script
-  Metamodule mount script executed successfully
+su -c 'sh /data/adb/modules/misans/action.sh'
 ```
 
-Скрипты выполняются **до** монтирования. Значит в `post-fs-data.sh` конфиги
-ещё можно править — монтирование подхватит уже изменённые файлы.
+prints the current state.
 
-По этой же причине проверять здесь оверлей бессмысленно: на этом этапе его ещё
-нет, проверка всегда увидит пустоту. Именно так модуль однажды отключил сам себя.
+## Weight
 
-## Тонкость, без которой телефон не грузится
-
-Файлы модуля должны иметь SELinux-контекст `system_file`. Попавшие через
-`adb push` наследуют `shell_data_file`, и тогда:
+KernelSU → MiSans System Font → web UI. Slider 0…300, presets, a weight
+mapping table and a "save and reboot" button.
 
 ```
-W auditd: avc:  denied { read } for name="fonts.xml" dev="overlay"
-           scontext=u:r:zygote:s0
-E SystemFonts: FileNotFoundException: /system/etc/fonts.xml: EACCES
-E SystemServerInitThreadPool: Failure in FontManagerService_create: NullPointerException
+0   → regular text at 400
+100 → 500
+200 → 600
+300 → 700, the top of the MiSans axis
 ```
 
-`serviceStarted.complete(null)` не вызывается, `mServiceStarted.join()` висит
-вечно, вотердог убивает SystemServer — телефон не грузится вообще.
-
-Проверять после установки:
-
-```bash
-ls -lZ /system/fonts/Roboto-Regular.ttf   # должно быть system_file
-```
-
-Модуль ставит контекст в `customize.sh` при установке и проверяет его в
-`service.sh`. В `sepolicy.rule` лежит подстраховка на случай, если `chcon`
-не сработал.
-
-## Управление
-
-**KernelSU → MiSans System Font → веб-интерфейс.** Ползунок 0…300, пресеты,
-таблица соответствия весов, кнопка «Сохранить и перезагрузить».
-
-Из консоли:
+From a shell:
 
 ```bash
 su -c 'sh /data/adb/modules/misans/action.sh set 150'
-su -c 'sh /data/adb/modules/misans/action.sh'      # только показать
 ```
 
-**Нужна перезагрузка.** Конфигурация шрифтов читается один раз при старте,
-обновления на лету нет.
+A reboot is required. The font configuration is read once at boot.
 
-## `/product` перекрыть нельзя
+## How it works
 
-PixelOS задаёт часы ресурсом `config_clockFontFamily = google-sans-clock` из
-`/product/etc/fonts_customization.xml`. Оба пути закрыты:
+Three parts.
 
-- `/system/product` — симлинк на точку монтирования раздела, модуль его ломает
-- `extra_mount` в HybridMount требует отсутствия записи в `/system` и отвергает
-  `/product` с `invalid extra_mount partition`
-- алиас из системного слоя не помогает: при конфликте выигрывает именованное
-  семейство (`Typeface.initSystemDefaultTypefaces`)
+**The font.** `MiSansLatinVF.ttf` from the stock Xiaomi 13 `product` partition
+is installed as `/system/fonts/Roboto-Regular.ttf`. Only the file changes, the
+name stays, so the system configuration remains valid by construction. The
+PostScript name is patched to `Roboto-Regular` because `FontListParser` derives
+it from the filename and the font map fails to resolve otherwise.
 
-Изменение часов возможно только правкой прошивки.
+`sans-serif`, `roboto`, `sans-serif-condensed` and the system fallback all
+follow from that one file.
 
-## Границы
+**The weight shift** is written into the font configuration at every boot.
+`post-fs-data.sh` copies the templates in `templates/` and adds the shift to
+each `wght` value.
 
-**Приложения со вшитым шрифтом не затрагиваются.** Если приложение кладёт `.ttf`
-в assets и обращается по имени, конфиг на него не действует. Так же работает и
-стоковый HyperOS.
+It is not `Settings.Secure.FONT_WEIGHT_ADJUSTMENT`. That setting is applied in
+`TextView.setTypeface()` only, so apps that pick a font outside that path never
+see it, and it can only add weight — on top of an existing shift the slider
+cannot go lower, which is what made it look broken.
 
-**Google Play Services** тянет часть шрифтов через собственный `FontsProvider`.
+**The interface and clock** are substituted through `/product`, via VFS rules:
 
-**`sans-serif-monospace` и `sans-serif-smallcaps`** остаются на Roboto: у них
-другие файлы. **`sans-serif-condensed`** формально остаётся, но у MiSans нет
-оси `wdth`, так что визуально он будет обычной ширины.
+```
+/product/etc/fonts_customization.xml       → generated config
+/product/fonts/GoogleSans-Regular.ttf      → MiSans
+/product/fonts/GoogleSansFlex-Regular.ttf  → MiSans
+/product/fonts/GoogleSansClock-Regular.ttf → MiSans
+```
 
-## Шрифт
+### Why /product is involved
 
-`MiSansLatinVF.ttf` взят из стокового `product` Xiaomi 13. Латиница и кириллица
-в одном файле, ось `wght` 150..700. PostScript-имя пропатчено на
-`Roboto-Regular`: `FontListParser` выводит его из имени файла, и при несовпадении
-карта шрифтов не разрешает нужный глиф.
+PixelOS declares the interface font in a runtime overlay in `/product`:
 
-Код модуля — MIT. Шрифт — собственность Xiaomi, распространяется с их
-прошивками; модуль не содержит лицензии на него и предназначен для устройств,
-на которых уже установлена стоковая прошивка Xiaomi.
+```xml
+<string name="config_bodyFontFamily">google-sans-text</string>
+<string name="config_clockFontFamily">google-sans-clock</string>
+```
+
+A family defined in `/system/etc/fonts.xml` under the same name is silently
+dropped, because the OEM customization wins:
+
+```java
+// FontListParser.java
+if (!oemNamedFamilies.containsKey(name)) {
+    // The OEM customization overrides system named family.
+```
+
+Three other routes are closed as well:
+
+- overriding the resource needs an RRO overlay, which also lives in `/product`
+- substituting the file through updatable fonts needs a PKCS#7 signature from
+  `/product/etc/security/fsverity/gms_fsverity_cert.der`, a Google key
+- `extra_mount` in HybridMount refuses `/product`, because it requires no
+  matching `/system` entry and `/system/product` is a symlink
+
+VFS rules redirect paths in the kernel and are not subject to that check.
+
+### Why GoogleSansFlex matters
+
+`GoogleSansFlex-Regular.ttf` holds **535 glyphs**: Latin and digits, with no
+Cyrillic at all. The interface asks for `variable-*` families, all of which use
+that file. Without replacing it, a single line mixes two fonts — Latin from
+stock Google Sans Flex, Cyrillic falling through to MiSans:
+
+```
+status bar clock   digits thin, everything else bold
+app drawer         Russian names bold, English names thin
+shade date         "Вс окт." bold, "11" thin
+```
+
+### How the generated config is built
+
+`build_customization.py` turns the stock `fonts_customization.xml` into a
+template. It repoints faces by **file**, not by family name — the interface
+asks for 18 `variable-*` families, and listing them by hand means forgetting
+one. Axes MiSans does not have (`GRAD`, `opsz`, `wdth`) are dropped. Italic
+faces stay on `GoogleSans-Italic.ttf`, since MiSans has no italic file.
+
+```bash
+python3 build_customization.py fonts_customization.xml templates/fonts_customization.xml
+```
+
+Run it against a `fonts_customization.xml` from your ROM.
+
+## Why post-fs-data
+
+metamodule runs its mount script after the module scripts:
+
+```
+ksud::cli: command: PostFsData
+  exec <module>/post-fs-data.sh            ← here
+  ksud::metamodule: Executing mount script
+```
+
+So the configs can still be edited, and the mount picks up the changed files.
+Checking the overlay at this point would be pointless — it does not exist yet.
+
+## One detail without which the device does not boot
+
+Everything shipped in `/system` must carry the SELinux context
+`system_file`. Files pushed over adb keep `shell_data_file`, magic mount
+serves them under that context, and zygote cannot read the config:
+
+```
+avc:  denied { read } for name="fonts.xml" dev="overlay"
+      scontext=u:r:zygote:s0
+E SystemFonts: FileNotFoundException: /system/etc/fonts.xml: EACCES
+```
+
+`FontManagerService_create` then fails, `serviceStarted.complete(null)` is never
+called, `mServiceStarted.join()` blocks forever and the watchdog kills
+SystemServer in a loop.
+
+```bash
+ls -lZ /system/fonts/Roboto-Regular.ttf   # expect system_file
+```
+
+`customize.sh` sets the context on install and `service.sh` repairs it later.
+`sepolicy.rule` is a fallback in case `chcon` does not take.
+
+## Turning the interface substitution off
+
+```
+su -c 'sh /data/adb/modules/misans/action.sh unify off'
+```
+
+Reboot to apply. The interface and clock return to Google Sans, apps stay on
+MiSans. There is also a toggle in the web UI.
+
+VFS rules are runtime-only and never written to disk, so a reboot is always a
+way back to stock even without the switch.
+
+## Known limits
+
+**Apps with their own bundled font** are not affected. An app that ships a
+`.ttf` in assets and asks for it by name bypasses the configuration. Stock
+HyperOS behaves the same way.
+
+**Google Play Services** pulls some fonts through its own `FontsProvider`.
+
+**`sans-serif-monospace` and `sans-serif-smallcaps`** stay on Roboto: they use
+different files. `sans-serif-monospace` resolves to `DroidSansMono.ttf`,
+which is left alone on purpose — a clock needs fixed-width digits.
+
+**Italic** stays Google Sans, because MiSans has no italic file.
+
+## Tests
+
+```bash
+node test_webui.js
+```
+
+Runs the web UI in node with stubbed `document` and `ksu`, presses every
+button and checks the status text. `node --check` only catches syntax errors;
+a lost `+` once made the save button throw while the check passed.
+
+## Licence
+
+Module code: MIT, see `LICENSE`.
+
+The MiSans font is Xiaomi's property and is redistributed with their firmware.
+This module carries no licence for it and is intended for devices that already
+run the stock Xiaomi ROM. It is not a ROM build and does not modify system
+binaries.

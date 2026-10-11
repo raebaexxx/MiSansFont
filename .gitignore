@@ -1,4 +1,4 @@
-# снятые с телефона оригиналы конфигов — нужны только для сборки
+# Original configs pulled off the device, used only to build the templates
 _device/
-# собранный zip релиза
+# Release archives
 *.zip

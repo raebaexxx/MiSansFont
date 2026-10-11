@@ -1,9 +1,9 @@
-# Подстраховка на случай, если chcon в customize.sh не сработал
-# (например, SELinux-политика не даёт переменить контекст).
+# Fallback for the case where chcon in customize.sh did not take, for example
+# because the policy forbids changing the context.
 #
-# Основная причина бутлупа была в том, что файлы модуля приходили с
-# контекстом shell_data_file, и zygote не мог прочитать конфигурацию
-# шрифтов. Если контекст всё же окажется не тем, разрешаем чтение.
+# The boot failure this prevents: module files arriving with shell_data_file,
+# which magic mount then serves under that context, so zygote cannot read the
+# font configuration. If the context is wrong anyway, allow the read.
 allow zygote shell_data_file file { read open getattr map }
 allow system_server shell_data_file file { read open getattr map }
 allow zygote_file shell_data_file file { read open getattr map }

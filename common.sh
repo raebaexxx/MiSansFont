@@ -1,25 +1,24 @@
 #!/system/bin/sh
-# Общий код модуля MiSans.
-#
-# Толщина задаётся сдвигом веса в конфигурации, а не настройкой
-# Settings.Secure.FONT_WEIGHT_ADJUSTMENT. Настройка работает не везде:
-# приложения, задающие шрифт мимо TextView.setTypeface(), её не видят,
-# и нижняя граница ползунка не опускается ниже того, что уже задано в XML.
-#
-# Сдвиг применяется в post-fs-data.sh, который выполняется ДО монтирования
-# system/ модулей, поэтому конфиги успевают переписаться.
+# Shared state and helpers.
+
+# Weight is a shift written into the font configuration rather than
+# Settings.Secure.FONT_WEIGHT_ADJUSTMENT. The setting is applied only in
+# TextView.setTypeface(), so apps that pick a font outside that path never see
+# it, and it can only add weight — on top of an existing shift the slider
+# cannot go lower. A shift in the XML reaches everyone and gives the full range.
+
+# The shift is applied by post-fs-data.sh, which runs before modules are mounted.
 
 STATE_DIR=/data/adb/misans
 SHIFT_FILE="$STATE_DIR/shift"
 UNIFY_FILE="$STATE_DIR/unify"
 
-# 300 = обычный текст рисуется как 700, потолок оси MiSans.
 DEFAULT_SHIFT=300
 MAX_SHIFT=300
 
-# Подменять ли /product через VFS-правила: 1 — да, 0 — нет.
-# Выключатель нужен, потому что правка /product затрагивает интерфейс
-# целиком, а не только приложения, и откатывается только перезагрузкой.
+# Substitute /product through VFS rules: 1 on, 0 off.
+# Off is a full escape hatch — it touches the interface, not just apps, and the
+# only way back is a reboot.
 DEFAULT_UNIFY=1
 
 ensure_state() {
@@ -49,7 +48,7 @@ set_unify() {
     echo "$1" > "$UNIFY_FILE"
 }
 
-# Чему соответствует сдвиг в оси MiSans.
+# Resulting axis value, clamped to what MiSans actually has.
 axis_of() {
     w=$(( $1 + $2 ))
     [ "$w" -lt 150 ] && w=150
