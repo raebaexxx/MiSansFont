@@ -68,6 +68,7 @@
 
   .st { margin-top: 10px; font-size: 12px; color: var(--dim); min-height: 17px; }
   .st.err { color: #ff8a80; }
+  .ver { text-align: center; font-size: 11px; color: var(--dim); margin-top: 18px; }
 </style>
 </head>
 <body>
@@ -97,6 +98,8 @@
 </div>
 
 <div class="card rows" id="rows"></div>
+
+<div class="ver" id="ver">webroot v3.3.1 · загружено</div>
 
 <script>
 let n = 0;
@@ -152,7 +155,7 @@ async function readCur() {
     const r = await exec('cat /data/adb/misans/weight 2>/dev/null');
     const v = parseInt((r.stdout || '').trim(), 10);
     if (!isNaN(v) && v >= 0 && v <= 300) { cur = v; $('sl').value = v; }
-  catch (e) {}
+  } catch (e) {}
   render(); rows();
 }
 
@@ -186,8 +189,10 @@ if (typeof ksu === 'undefined') {
   $('st').textContent = 'Страница открыта вне KernelSU — команды недоступны.';
   render(); rows();
 } else {
-  try { ksu.enableEdgeToEdge && ksu.enableEdgeToEdge(true); } catch (e) {}
+  try { if (ksu.enableEdgeToEdge) ksu.enableEdgeToEdge(true); } catch (e) {}
   readCur();
+  // отметка, что скрипт действительно выполнился
+  $('ver').textContent = 'webroot v3.3.1 · скрипт выполнен, ksu: ' + (typeof ksu);
 }
 </script>
 </body>
