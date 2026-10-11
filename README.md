@@ -2,39 +2,24 @@
 
 Модуль для KernelSU / Magisk: системный шрифт Android меняется с Roboto на **MiSans**.
 
-Прямые штрихи вместо закруглённых, кириллица из одного файла, вес всего текста
-смещён в полужирный. Меняется три файла в `/system` — конфигурация системы
-остаётся валидной по построению.
+Прямые штрихи вместо закруглённых, кириллица из одного файла, толщина
+регулируется ползунком и работает во всех приложениях.
 
 ---
 
-## Что делает
+## Как устроено
 
-| Файл | Что |
-|---|---|
-| `system/fonts/Roboto-Regular.ttf` | MiSans под именем Roboto |
-| `system/etc/font_fallback.xml` | вес `sans-serif` сдвинут вверх |
-| `system/etc/fonts.xml` | то же в легаси-формате |
+```
+system/fonts/Roboto-Regular.ttf      MiSans под именем Roboto
+system/etc/font_fallback.xml         семейство sans-serif
+system/etc/fonts.xml                 то же в легаси-формате
+post-fs-data.sh                      применяет сохранённый сдвиг
+```
 
 `Roboto-Regular.ttf` используется семействами `sans-serif`, `roboto`,
 `sans-serif-condensed` и общим запасным шрифтом — то есть покрывает всю систему.
 
-### Сдвиг веса
-
-```
-запрошено   рендерится
-   100  →    150      нижний предел оси MiSans
-   300  →    600
-   400  →    600      обычный текст полужирный
-   500  →    650
-   700  →    700      жирный остаётся жирным
-```
-
-Так выделение сохраняется, а весь обычный текст выглядит жирным.
-
----
-
-## Почему не через ползунок в настройках
+## Почему толщина задаётся в конфигурации, а не настройкой
 
 В AOSP есть `Settings.Secure.FONT_WEIGHT_ADJUSTMENT`, и `TextView` складывает
 его с осью `wght`:
@@ -44,143 +29,109 @@
 public void setTypeface(@Nullable Typeface tf) {
     if (mFontWeightAdjustment != 0 && ...) {
         int newWeight = Math.min(Math.max(tf.getWeight() + mFontWeightAdjustment, ...), FONT_WEIGHT_MAX);
-        tf = Typeface.create(tf, newWeight, italic);
-    }
 ```
 
-Значение действительно доходит до приложений — видно в `dumpsys window`:
-`fontWeightAdjustment=300`. Но применяется оно только на этом пути. Приложения,
-задающие шрифт в обход `TextView.setTypeface()`, его игнорируют.
+Два ограничения сделали его непригодным как единственный механизм:
 
-Поэтому вес сдвигается в самой конфигурации. Это работает везде независимо от
-приложения.
+**1. Он не везде применяется.** Срабатывает только на этом пути. Приложения,
+задающие шрифт мимо `TextView.setTypeface()`, его не видят.
 
----
+**2. Он только добавляет.** Значение складывается поверх веса из конфигурации.
+Если там уже стоит сдвиг, нижняя граница ползунка поднимается, и опустить
+толщину ниже нельзя. При сдвиге 200 обычный текст рисуется как 600, и ползунок
+от 0 до 300 даёт лишь 600…700 — почти неразличимо.
+
+Поэтому сдвиг пишется прямо в конфигурацию. Он работает у всех, кто берёт
+системный шрифт, и даёт полный диапазон.
+
+## Почему это в `post-fs-data.sh`
+
+Порядок загрузки с metamodule HybridMount:
+
+```
+ksud::cli: command: PostFsData
+  exec <модуль>/post-fs-data.sh          ← наши скрипты
+  ksud::metamodule: Executing mount script
+  Metamodule mount script executed successfully
+```
+
+Скрипты выполняются **до** монтирования. Значит в `post-fs-data.sh` конфиги
+ещё можно править — монтирование подхватит уже изменённые файлы.
+
+По этой же причине проверять здесь оверлей бессмысленно: на этом этапе его ещё
+нет, проверка всегда увидит пустоту. Именно так модуль однажды отключил сам себя.
 
 ## Тонкость, без которой телефон не грузится
 
-SELinux-контекст файлов в модуле должен быть `system_file`.
-
-Файлы, попавшие в модуль через `adb push`, наследуют `shell_data_file`.
-Magic mount подставляет их в `/system` с этим контекстом, и SELinux запрещает
-zygote читать конфигурацию шрифтов:
+Файлы модуля должны иметь SELinux-контекст `system_file`. Попавшие через
+`adb push` наследуют `shell_data_file`, и тогда:
 
 ```
 W auditd: avc:  denied { read } for name="fonts.xml" dev="overlay"
            scontext=u:r:zygote:s0
 E SystemFonts: FileNotFoundException: /system/etc/fonts.xml: EACCES
-E SystemServerInitThreadPool: Failure in FontManagerService_create:
-    java.lang.NullPointerException: at android.graphics.Typeface.create
+E SystemServerInitThreadPool: Failure in FontManagerService_create: NullPointerException
 ```
 
-Дальше `serviceStarted.complete(null)` не вызывается, `mServiceStarted.join()`
-висит вечно, вотердог убивает SystemServer, он перезапускается и падает снова.
-Телефон не грузится вообще.
+`serviceStarted.complete(null)` не вызывается, `mServiceStarted.join()` висит
+вечно, вотердог убивает SystemServer — телефон не грузится вообще.
 
-Модуль лечит это в трёх местах:
-
-- `customize.sh` — `chcon -R u:object_r:system_file:s0` при установке
-- `service.sh` — проверяет контекст подменённого шрифта и чинит его
-- `sepolicy.rule` — подстраховка на случай, если `chcon` не сработал
-
-Проверить после установки:
+Проверять после установки:
 
 ```bash
-ls -lZ /system/fonts/Roboto-Regular.ttf
+ls -lZ /system/fonts/Roboto-Regular.ttf   # должно быть system_file
 ```
 
-Должно быть `u:object_r:system_file:s0`.
+Модуль ставит контекст в `customize.sh` при установке и проверяет его в
+`service.sh`. В `sepolicy.rule` лежит подстраховка на случай, если `chcon`
+не сработал.
 
----
+## Управление
 
-## Часы в строке состояния остаются Google Sans
+**KernelSU → MiSans System Font → веб-интерфейс.** Ползунок 0…300, пресеты,
+таблица соответствия весов, кнопка «Сохранить и перезагрузить».
 
-PixelOS задаёт часы ресурсом `config_clockFontFamily = google-sans-clock`,
-который приходит из `/product/etc/fonts_customization.xml`.
+Из консоли:
 
-Перекрыть `/product` на этом устройстве нельзя, оба пути закрыты:
-
-**1. `system/product/` в модуле.** В system-as-root `/system/product` — симлинк
-на точку монтирования раздела:
-
-```
-/system/product -> /product
-KSU on /system/etc    type overlay
+```bash
+su -c 'sh /data/adb/modules/misans/action.sh set 150'
+su -c 'sh /data/adb/modules/misans/action.sh'      # только показать
 ```
 
-Модуль создаёт каталог поверх симлинка, и монтирование ломается.
+**Нужна перезагрузка.** Конфигурация шрифтов читается один раз при старте,
+обновления на лету нет.
 
-**2. `extra_mount` в metamodule HybridMount.** Разрешено только для разделов
-без соответствующей записи в `/system`:
+## `/product` перекрыть нельзя
 
-```toml
-# config.toml
-# Targets must exist and have no corresponding /system entry.
-extra_mount = []
-```
+PixelOS задаёт часы ресурсом `config_clockFontFamily = google-sans-clock` из
+`/product/etc/fonts_customization.xml`. Оба пути закрыты:
 
-Бинарь отвергает `/product` явно:
+- `/system/product` — симлинк на точку монтирования раздела, модуль его ломает
+- `extra_mount` в HybridMount требует отсутствия записи в `/system` и отвергает
+  `/product` с `invalid extra_mount partition`
+- алиас из системного слоя не помогает: при конфликте выигрывает именованное
+  семейство (`Typeface.initSystemDefaultTypefaces`)
 
-```
-extra_mount: /system entry already exists
-invalid extra_mount partition:
-```
-
-**3. Алиас из системного слоя** тоже не помогает — при конфликте выигрывает
-именованное семейство:
-
-```java
-// Typeface.initSystemDefaultTypefaces
-if (outSystemFontMap.containsKey(alias.getName())) {
-    continue; // If alias and named family are conflict, use named family.
-}
-```
-
-Единственный рабочий способ изменить часы — правка в дереве прошивки, одной
-пересборкой, без модуля.
-
----
+Изменение часов возможно только правкой прошивки.
 
 ## Границы
 
 **Приложения со вшитым шрифтом не затрагиваются.** Если приложение кладёт `.ttf`
-в assets и обращается по имени, `fonts.xml` на него не действует. Так же
-работает и стоковый HyperOS.
+в assets и обращается по имени, конфиг на него не действует. Так же работает и
+стоковый HyperOS.
 
-**Google Play Services** тянет шрифты через собственный `FontsProvider`,
-минуя системный. На практике приложения Google используют системные семейства
-и переезжают на MiSans, но полное отключение GMS-шрифтов в модуль не входит.
+**Google Play Services** тянет часть шрифтов через собственный `FontsProvider`.
 
 **`sans-serif-monospace` и `sans-serif-smallcaps`** остаются на Roboto: у них
-другие файлы.
-
-**`sans-serif-condensed`** формально остаётся, но у MiSans нет оси `wdth`,
-так что визуально он будет обычной ширины.
-
----
-
-## Установка
-
-1. Скачать `MiSansFont-v3.2.zip` из релизов
-2. KernelSU → Модули → Установить из хранилища
-3. Перезагрузка
-
-Ползунок толщины — кнопка «Действие» у модуля, значения 0…300 поверх сдвига:
-
-```bash
-su -c 'sh /data/adb/modules/misans/action.sh set 0'
-```
-
-При 0 обычный текст будет 600, при 300 — 700, то есть в потолок оси.
-
----
+другие файлы. **`sans-serif-condensed`** формально остаётся, но у MiSans нет
+оси `wdth`, так что визуально он будет обычной ширины.
 
 ## Шрифт
 
 `MiSansLatinVF.ttf` взят из стокового `product` Xiaomi 13. Латиница и кириллица
-в одном файле, ось `wght` 150..700. PostScript-имя пропатчено на `Roboto-Regular`:
-`FontListParser` выводит его из имени файла, и при несовпадении карта шрифтов
-не разрешает нужный глиф.
+в одном файле, ось `wght` 150..700. PostScript-имя пропатчено на
+`Roboto-Regular`: `FontListParser` выводит его из имени файла, и при несовпадении
+карта шрифтов не разрешает нужный глиф.
 
 Код модуля — MIT. Шрифт — собственность Xiaomi, распространяется с их
 прошивками; модуль не содержит лицензии на него и предназначен для устройств,

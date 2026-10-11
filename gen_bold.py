@@ -14,14 +14,24 @@ TextView или с собственными начертаниями, его и�
 changes made to font_fallback.xml must be made to fonts.xml."
 """
 
+import os
 import re
 import sys
 
 MIN_AXIS, MAX_AXIS = 150, 700   # ось MiSans
 
-# запрошенный вес -> значение оси
+# Базовый сдвиг веса в конфигурации. Ноль означает «начертание 1:1», и тогда
+# толщиной управляет только Settings.Secure.FONT_WEIGHT_ADJUSTMENT.
+#
+# Ненулевой сдвиг страхует приложения, задающие шрифт мимо
+# TextView.setTypeface(), но поднимает нижнюю границу ползунка: при сдвиге
+# 200 обычный текст рисуется как 600, и опустить его ниже нельзя — ползунок
+# умеет только прибавлять. Поэтому по умолчанию ноль.
+BASE_SHIFT = int(os.environ.get('MISANS_BASE_SHIFT', '0'))
+
+
 def shifted(weight):
-    return {400: 600, 500: 650, 600: 700, 700: 700}.get(weight, weight)
+    return max(MIN_AXIS, min(MAX_AXIS, weight + BASE_SHIFT))
 
 
 def legacy_block():

@@ -1,43 +1,41 @@
 #!/system/bin/sh
-# Общий код модуля MiSans: чтение/запись веса и применение к системе.
+# Общий код модуля MiSans.
+#
+# Толщина задаётся сдвигом веса в конфигурации, а не настройкой
+# Settings.Secure.FONT_WEIGHT_ADJUSTMENT. Настройка работает не везде:
+# приложения, задающие шрифт мимо TextView.setTypeface(), её не видят,
+# и нижняя граница ползунка не опускается ниже того, что уже задано в XML.
+#
+# Сдвиг применяется в post-fs-data.sh, который выполняется ДО монтирования
+# system/ модулей, поэтому конфиги успевают переписаться.
 
 STATE_DIR=/data/adb/misans
-WEIGHT_FILE="$STATE_DIR/weight"
-# 300 = максимум: обычный текст 400+300=700, а 700 упирается в предел оси MiSans.
-DEFAULT_WEIGHT=300
-MAX_WEIGHT=300
+SHIFT_FILE="$STATE_DIR/shift"
+
+# 300 = обычный текст рисуется как 700, потолок оси MiSans.
+DEFAULT_SHIFT=300
+MAX_SHIFT=300
 
 ensure_state() {
     mkdir -p "$STATE_DIR"
-    [ -f "$WEIGHT_FILE" ] || echo "$DEFAULT_WEIGHT" > "$WEIGHT_FILE"
-    chmod 0644 "$WEIGHT_FILE"
+    [ -f "$SHIFT_FILE" ] || echo "$DEFAULT_SHIFT" > "$SHIFT_FILE"
+    chmod 0644 "$SHIFT_FILE"
 }
 
-get_weight() {
+get_shift() {
     ensure_state
-    cat "$WEIGHT_FILE" 2>/dev/null || echo "$DEFAULT_WEIGHT"
+    cat "$SHIFT_FILE" 2>/dev/null || echo "$DEFAULT_SHIFT"
 }
 
-set_weight() {
+set_shift() {
     ensure_state
-    echo "$1" > "$WEIGHT_FILE"
-    apply_weight "$1"
+    echo "$1" > "$SHIFT_FILE"
 }
 
-# Идентификаторы всех пользователей. Формат pm list users:
-#   UserInfo{0:Owner:c13} running
-# — делить по двоеточию нельзя, после первого идёт имя, а не uid.
-list_users() {
-    pm list users 2>/dev/null | sed -n 's/.*UserInfo{\([0-9][0-9]*\):.*/\1/p'
-}
-
-# Раскладывает значение по всем пользователям и будит SystemUI,
-# который уже держит старую Configuration.
-apply_weight() {
-    w="$1"
-    for uid in $(list_users); do
-        settings --user "$uid" put secure font_weight_adjustment "$w" 2>/dev/null
-    done
-    sleep 1
-    killall com.android.systemui 2>/dev/null
+# Чему соответствует сдвиг в оси MiSans.
+axis_of() {
+    w=$(( $1 + $2 ))
+    [ "$w" -lt 150 ] && w=150
+    [ "$w" -gt 700 ] && w=700
+    echo "$w"
 }
