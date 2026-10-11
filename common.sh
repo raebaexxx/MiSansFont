@@ -24,11 +24,18 @@ set_weight() {
     apply_weight "$1"
 }
 
+# Идентификаторы всех пользователей. Формат pm list users:
+#   UserInfo{0:Owner:c13} running
+# — делить по двоеточию нельзя, после первого идёт имя, а не uid.
+list_users() {
+    pm list users 2>/dev/null | sed -n 's/.*UserInfo{\([0-9][0-9]*\):.*/\1/p'
+}
+
 # Раскладывает значение по всем пользователям и будит SystemUI,
 # который уже держит старую Configuration.
 apply_weight() {
     w="$1"
-    for uid in $(pm list users 2>/dev/null | cut -d: -f2 | tr -d ' '); do
+    for uid in $(list_users); do
         settings --user "$uid" put secure font_weight_adjustment "$w" 2>/dev/null
     done
     sleep 1
