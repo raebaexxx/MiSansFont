@@ -94,6 +94,37 @@ shift_targets() {
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 
+# То же, но отбор по ФАЙЛУ, а не по имени семейства. Нужно для OEM-конфига:
+# интерфейс просит variable-* — это 18 семейств, и список имён пришлось бы
+# вести вручную. Начертание опознаётся по имени файла в теге <font>.
+shift_by_file() {
+    name="$1"
+    file="$2"
+    awk -v shift="$SHIFT" -v lo="$MIN_AXIS" -v hi="$MAX_AXIS" -v name="$name" '
+        {
+            if (index($0, name) > 0) {
+                w = -1
+                if (match($0, /weight="[0-9]+"/)) {
+                    w = substr($0, RSTART + 8, RLENGTH - 9) + 0
+                }
+                pend = 1
+            }
+            if (pend && index($0, "tag=\"wght\"") > 0) {
+                if (match($0, /stylevalue="[0-9]+"/)) {
+                    cur = substr($0, RSTART + 12, RLENGTH - 13) + 0
+                    if (w >= 0) cur = w
+                    v = cur + shift
+                    if (v < lo) v = lo
+                    if (v > hi) v = hi
+                    sub(/stylevalue="[0-9]+"/, "stylevalue=\"" v "\"")
+                }
+                pend = 0
+            }
+            print
+        }
+    ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
 # Тот же сдвиг, но для семейства sans-serif в конфигах /system.
 # Сдвигается КОПИЯ эталона: иначе операция не идемпотентна и следующий
 # запуск уже не сможет вернуть исходные значения.
@@ -122,10 +153,9 @@ serve_product() {
     cp "$tpl" "$SERVE/fonts_customization.xml" || return 0
     cp "$font" "$SERVE/GoogleSans-Regular.ttf" || return 0
 
-    shift_targets "google-sans google-sans-medium google-sans-bold google-sans-text google-sans-clock" \
-        "$SERVE/fonts_customization.xml"
+    shift_by_file "GoogleSans-Regular.ttf" "$SERVE/fonts_customization.xml"
 
-    # Права и контекст — ПОСЛЕ сдвига. shift_targets перезаписывает файл
+    # Права и контекст — ПОСЛЕ сдвига. shift_by_file перезаписывает файл
     # через mv, и на новом файле метки были бы уже не те: корень и
     # cache_file вместо system. zygote читает из своего SELinux-домена.
     chown -R 1000:1000 "$SERVE" 2>/dev/null
@@ -136,10 +166,10 @@ serve_product() {
 
     "$HYBRID" vfs load >/dev/null 2>&1
     "$HYBRID" vfs rule add "$OEM_XML" "$SERVE/fonts_customization.xml" >/dev/null 2>&1
-    "$HYBRID" vfs rule add "$PRODUCT_FONTS/GoogleSans-Regular.ttf" \
-        "$SERVE/GoogleSans-Regular.ttf" >/dev/null 2>&1
-    "$HYBRID" vfs rule add "$PRODUCT_FONTS/GoogleSansClock-Regular.ttf" \
-        "$SERVE/GoogleSans-Regular.ttf" >/dev/null 2>&1
+    for f in GoogleSans-Regular.ttf GoogleSansFlex-Regular.ttf GoogleSansClock-Regular.ttf; do
+        "$HYBRID" vfs rule add "$PRODUCT_FONTS/$f" "$SERVE/GoogleSans-Regular.ttf" \
+            >/dev/null 2>&1
+    done
 }
 
 rewrite_sans

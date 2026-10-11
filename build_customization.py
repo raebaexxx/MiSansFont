@@ -1,51 +1,61 @@
 #!/usr/bin/env python3
 """Готовит fonts_customization.xml для подмены через VFS-правило.
 
-PixelOS держит семейства google-sans* в /product/etc/fonts_customization.xml,
-и FontListParser выкидывает одноимённые семейства из /system/etc/fonts.xml:
+PixelOS держит семейства google-sans* и variable-* в
+/product/etc/fonts_customization.xml, и FontListParser выкидывает одноимённые
+семейства из /system/etc/fonts.xml:
 
     if (!oemNamedFamilies.containsKey(name)) {
         // The OEM customization overrides system named family.
 
-Поэтому подменяется сам OEM-конфиг: прямые начертания переводятся на
-Roboto-Regular.ttf (это MiSans, он лежит в /system/fonts), лишние оси
-удаляются, а вес wght становится осью, которую умеет менять ползунок.
+Поэтому подменяется сам OEM-конфиг: начертания переводятся на
+GoogleSans-Regular.ttf (это MiSans, он лежит под правилом), лишние оси
+удаляются, а вес wght остаётся осью, которую умеет менять ползунок.
 
-Курсивные начертания не трогаются: у MiSans нет курсивного файла, и
-GoogleSans-Italic.ttf продолжает давать настоящий курсив.
+Отбор идёт ПО ФАЙЛУ, а не по имени семейства. Так подхватываются все 18
+семейств variable-*, не надо вести список: строка состояния просит
+variable-label-large-emphasized, и без этого часы, заряд и имя оператора
+остались бы стоковыми.
 
-Запуск:  build_customization.py <исходный.xml> <шаблон.xml> [семейство ...]
+Курсивные начертания google-sans и google-sans-text лежат в отдельном файле
+GoogleSans-Italic.ttf и не трогаются: у MiSans нет курсивного файла.
+
+Запуск:  build_customization.py <исходный.xml> <шаблон.xml>
 """
 import re
 import sys
 
-# Начертания, которые интерфейс берёт через config_*FontFamily
-# (vendor/pixel/gsans/overlay/.../config.xml).
-DEFAULT_TARGETS = [
-    "google-sans",              # config_headlineFontFamily
-    "google-sans-medium",       # config_headlineFontFamilyMedium
-    "google-sans-bold",
-    "google-sans-text",         # config_bodyFontFamily
-    "google-sans-text-medium",
-    "google-sans-clock",        # config_clockFontFamily
-]
+# Файлы Google Sans, которые нужно заменить на MiSans.
+GOOGLE_FONTS = {
+    "GoogleSans-Regular.ttf",
+    "GoogleSansClock-Regular.ttf",
+    "GoogleSansFlex-Regular.ttf",
+}
 
-OUR_FONT = "GoogleSans-Regular.ttf"   # имя оставляем: OEM-конфиг ищет файлы в /product/fonts
+# Имя оставляем прежним: OEM-конфиг ищет файлы в /product/fonts, и отдельное
+# правило на каждое переименование не нужно.
+OUR_FONT = "GoogleSans-Regular.ttf"
 
-FONT_RE = re.compile(
-    r"(<font\b[^>]*>)(?P<body>.*?)(</font>)", re.S)
+FONT_RE = re.compile(r"(<font\b[^>]*>)(?P<body>.*?)(</font>)", re.S)
+# Имя файла ищется без обрамляющих > и <: закрывающий > тега <font> лежит
+# в другой группе, в теле его нет.
+NAME_RE = re.compile(r"([A-Za-z0-9_.-]+\.ttf)")
 ATTR_RE = re.compile(r'(\bweight=")([0-9]+)(")')
 STYLE_RE = re.compile(r'\bstyle="([a-z]+)"')
 AXIS_RE = re.compile(r"\s*<axis\b[^>]*/>")
 
 
+def weight_of(open_tag):
+    m = ATTR_RE.search(open_tag)
+    return m.group(2) if m else "400"
+
+
 def fix_font(m):
     open_tag, body, close_tag = m.group(1), m.group("body"), m.group(3)
-    style = STYLE_RE.search(open_tag)
-    if style and style.group(1) == "italic":
-        return m.group(0)                      # курсив оставляем как есть
+    name = NAME_RE.search(body)
+    if not name or name.group(1) not in GOOGLE_FONTS:
+        return m.group(0)
 
-    # Прямое начертание: файл наш, лишних осей в нём не существует.
     # Имя файла ищется без обрамляющих > и <: закрывающий > тега <font>
     # лежит в другой группе, в теле его нет.
     body = re.sub(r"[A-Za-z0-9_.-]+\.ttf", OUR_FONT, body, count=1)
@@ -54,36 +64,26 @@ def fix_font(m):
     return open_tag + body + close_tag
 
 
-def weight_of(open_tag):
-    m = ATTR_RE.search(open_tag)
-    return m.group(2) if m else "400"
-
-
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     src, dst = sys.argv[1], sys.argv[2]
-    targets = sys.argv[3:] or DEFAULT_TARGETS
 
     xml = open(src, encoding="utf-8").read()
-    touched = []
-
-    def repl(m):
-        head = m.group(0)
-        name = re.search(r'name="([^"]+)"', head)
-        if not name or name.group(1) not in targets:
-            return head
-        touched.append(name.group(1))
-        return FONT_RE.sub(fix_font, head)
-
-    out = re.sub(r"<family\b.*?</family>", repl, xml, flags=re.S)
+    out = FONT_RE.sub(fix_font, xml)
     open(dst, "w", encoding="utf-8").write(out)
 
-    missing = [t for t in targets if t not in touched]
-    print(f"  обработано семейств: {len(set(touched))} -> {sorted(set(touched))}")
-    if missing:
-        print(f"  НЕ НАЙДЕНЫ в исходнике: {missing}")
-    print(f"  наш файл в семействах: {out.count(OUR_FONT)} вхождений")
+    import xml.dom.minidom
+    xml.dom.minidom.parseString(out)
+
+    touched = 0
+    for m in FONT_RE.finditer(out):
+        n = NAME_RE.search(m.group("body"))
+        if n and n.group(1) == OUR_FONT:
+            touched += 1
+    print(f"  начертаний переведено на наш файл: {touched}")
+    print(f"  GoogleSans-Italic.ttf осталось: {out.count('GoogleSans-Italic.ttf')}")
+    print(f"  семейств в файле: {out.count('<family ')}")
 
 
 if __name__ == "__main__":
