@@ -2,9 +2,9 @@
 # Применяет сохранённый сдвиг веса к конфигам модуля.
 #
 # Скрипт выполняется на этапе post-fs-data, то есть ДО того, как metamodule
-# смонтирует system/ модулей. Значит конфиги можно править здесь: монтирование
-# подхватит уже изменённые файлы. Именно поэтому проверка оверлея здесь же
-# была бы бессмысленной, а перегенерация — в самый раз.
+# смонтирует system/ модулей. Значит конфиги здесь ещё можно править:
+# монтирование подхватит уже изменённые файлы. Именно поэтому проверять
+# оверлей здесь бессмысленно (его ещё нет), а перегенерация — в самый раз.
 
 MODDIR=${0%/*}
 [ -z "$MODPATH" ] && [ "$MODDIR" = "$0" ] && MODDIR="."
@@ -25,22 +25,23 @@ esac
 # прибавляя сдвиг и зажимая в пределы оси MiSans. Вес берётся из атрибута
 # weight того же элемента <font>: начертания в конфиге объявлены явно,
 # поэтому сдвигать нужно именно его значение.
-shift_one() {
+#
+# Правим КОПИЮ эталона, а не сам конфиг. Иначе операция не идемпотентна:
+# сдвиг 300 записался бы поверх файла, и следующий запуск с нулем уже не
+# смог бы вернуть исходные значения.
+rewrite() {
+    src="$1"
+    dst="$2"
     awk -v shift="$SHIFT" -v lo="$MIN_AXIS" -v hi="$MAX_AXIS" '
         /<family name="sans-serif">/ { inblock = 1 }
         inblock && /<font / {
             w = 0
             if (match($0, /weight="[0-9]+"/)) {
-                v = substr($0, RSTART + 8, RLENGTH - 9)
-                w = v + 0
+                w = substr($0, RSTART + 8, RLENGTH - 9) + 0
             }
         }
-        inblock && /stylevalue="[0-9]+"/ {
-            old = 0
+        inblock && /tag="wght"/ {
             if (match($0, /stylevalue="[0-9]+"/)) {
-                old = substr($0, RSTART + 12, RLENGTH - 13) + 0
-            }
-            if ($0 ~ /tag="wght"/) {
                 n = w + shift
                 if (n < lo) n = lo
                 if (n > hi) n = hi
@@ -49,11 +50,12 @@ shift_one() {
         }
         { print }
         inblock && /<\/family>/ { inblock = 0 }
-    ' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+    ' "$src" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 }
 
-if [ "$SHIFT" != "0" ]; then
-    for f in "$MODDIR/system/etc/fonts.xml" "$MODDIR/system/etc/font_fallback.xml"; do
-        [ -f "$f" ] && shift_one "$f"
-    done
-fi
+for name in fonts.xml font_fallback.xml; do
+    tpl="$MODDIR/templates/$name"
+    out="$MODDIR/system/etc/$name"
+    [ -f "$tpl" ] || continue
+    rewrite "$tpl" "$out"
+done
