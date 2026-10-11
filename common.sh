@@ -11,15 +11,22 @@
 
 STATE_DIR=/data/adb/misans
 SHIFT_FILE="$STATE_DIR/shift"
+UNIFY_FILE="$STATE_DIR/unify"
 
 # 300 = обычный текст рисуется как 700, потолок оси MiSans.
 DEFAULT_SHIFT=300
 MAX_SHIFT=300
 
+# Подменять ли /product через VFS-правила: 1 — да, 0 — нет.
+# Выключатель нужен, потому что правка /product затрагивает интерфейс
+# целиком, а не только приложения, и откатывается только перезагрузкой.
+DEFAULT_UNIFY=1
+
 ensure_state() {
     mkdir -p "$STATE_DIR"
     [ -f "$SHIFT_FILE" ] || echo "$DEFAULT_SHIFT" > "$SHIFT_FILE"
-    chmod 0644 "$SHIFT_FILE"
+    [ -f "$UNIFY_FILE" ] || echo "$DEFAULT_UNIFY" > "$UNIFY_FILE"
+    chmod 0644 "$SHIFT_FILE" "$UNIFY_FILE"
 }
 
 get_shift() {
@@ -30,6 +37,16 @@ get_shift() {
 set_shift() {
     ensure_state
     echo "$1" > "$SHIFT_FILE"
+}
+
+get_unify() {
+    ensure_state
+    cat "$UNIFY_FILE" 2>/dev/null || echo "$DEFAULT_UNIFY"
+}
+
+set_unify() {
+    ensure_state
+    echo "$1" > "$UNIFY_FILE"
 }
 
 # Чему соответствует сдвиг в оси MiSans.

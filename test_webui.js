@@ -38,7 +38,10 @@ global.window = global;
 
 // ---- заглушки ksu ----
 const calls = [];
-let execResults = { 'cat /data/adb/misans/shift 2>/dev/null': '300\n' };
+let execResults = {
+  'cat /data/adb/misans/shift 2>/dev/null': '300\n',
+  'cat /data/adb/misans/unify 2>/dev/null': '1\n',
+};
 global.ksu = {
   enableEdgeToEdge() {},
   toast(m) { calls.push(['toast', m]); },
@@ -100,7 +103,22 @@ const fire = async (id, ev = 'click') => {
   await fire('reload');
   console.log('  Прочитать текущее -> прочитал:', els['sl'].value);
 
+  // переключатель подмены /product
+  console.log('  состояние интерфейса:', els['unifyState'].textContent,
+              '| кнопка:', JSON.stringify(els['unify'].textContent));
+  calls.length = 0;
+  await fire('unify');
+  console.log('  Переключить ->', JSON.stringify(els['unifySt'].textContent));
+  console.log('    className:', JSON.stringify(els['unifySt'].className));
+  const u = calls.find(c => c[0] === 'exec' && /action\.sh unify/.test(c[1]));
+  console.log('    команда:', u ? u[1] : 'НЕ ВЫЗВАНА');
+  const uErr = els['unifySt'].textContent.includes('Ошибка')
+            || els['unifySt'].textContent.includes('Не удалось');
+  console.log('    ошибка в статусе:', uErr ? 'ДА' : 'нет');
+  if (!u || uErr) bad2 = true;
+
+  let bad2 = false;
   const bad = st1.includes('Не удалось') || st1.includes('Ошибка') || st2.includes('Не удалось') || st2.includes('Ошибка');
   console.log(bad ? '\n  ПРОВАЛ: интерфейс сообщил об ошибке' : '\n  ПРОХОД: все кнопки отработали');
-  process.exit(bad ? 1 : 0);
+  process.exit(bad || bad2 ? 1 : 0);
 })();

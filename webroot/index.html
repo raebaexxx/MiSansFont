@@ -85,6 +85,14 @@
 <div class="st" id="st"></div>
 
 <div class="card">
+  <div class="rows" style="margin-bottom:12px">
+    <div><span>Интерфейс системы</span><b id="unifyState">—</b></div>
+  </div>
+  <button class="btn ghost" id="unify" style="margin:0">Переключить</button>
+  <div class="st" id="unifySt"></div>
+</div>
+
+<div class="card">
   <div class="prev">
     <div class="a">Толщина текста <mark>сейчас</mark></div>
     <div class="b">Обычный текст, 19px, как в списках и чатах</div>
@@ -174,6 +182,36 @@ function readCur() {
   }).catch(function () { render(); });
 }
 
+function readUnify() {
+  return exec('cat /data/adb/misans/unify 2>/dev/null').then(function (r) {
+    var v = parseInt((r.stdout || '').trim(), 10);
+    $('unifyState').textContent = (v === 0) ? 'Google Sans' : 'MiSans';
+    $('unify').textContent = (v === 0) ? 'Включить MiSans' : 'Вернуть Google Sans';
+  }).catch(function () {
+    $('unifyState').textContent = 'неизвестно';
+  });
+}
+
+function toggleUnify() {
+  var cur = $('unifyState').textContent === 'MiSans';
+  var next = cur ? 'off' : 'on';
+  $('unifySt').className = 'st';
+  $('unifySt').textContent = 'Сохраняю…';
+  exec('sh /data/adb/modules/misans/action.sh unify ' + next).then(function (r) {
+    $('unifySt').className = 'st' + (+r.errno === 0 ? '' : ' err');
+    if (+r.errno !== 0) {
+      $('unifySt').textContent = 'Ошибка ' + r.errno + ': ' + (r.stderr || r.stdout || 'нет вывода');
+      return;
+    }
+    $('unifySt').textContent = 'Сохранено. Вступит в силу после перезагрузки.';
+    toast(next === 'on' ? 'MiSans в интерфейсе' : 'Google Sans в интерфейсе');
+    readUnify();
+  }).catch(function (e) {
+    $('unifySt').className = 'st err';
+    $('unifySt').textContent = 'Не удалось выполнить: ' + e;
+  });
+}
+
 function save(rebootAfter) {
   var v = $('sl').value;
   $('apply').disabled = true;
@@ -205,6 +243,7 @@ $('sl').addEventListener('input', render);
 $('apply').onclick = function () { save(false); };
 $('reload').onclick = readCur;
 $('reboot').onclick = function () { save(true); };
+$('unify').onclick = toggleUnify;
 
 if (typeof ksu === 'undefined') {
   $('st').className = 'st err';
@@ -213,7 +252,8 @@ if (typeof ksu === 'undefined') {
 } else {
   try { if (ksu.enableEdgeToEdge) ksu.enableEdgeToEdge(true); } catch (e) {}
   readCur();
-  $('ver').textContent = 'webroot v4.1 · скрипт выполнен';
+  readUnify();
+  $('ver').textContent = 'webroot v5.0 · скрипт выполнен';
 }
 </script>
 </body>

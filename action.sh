@@ -13,7 +13,13 @@ MODDIR=${0%/*}
 
 show() {
     s=$(get_shift)
+    u=$(get_unify)
     echo "  сдвиг: +$s"
+    if [ "$u" = "1" ]; then
+        echo "  интерфейс системы: MiSans (подмена /product включена)"
+    else
+        echo "  интерфейс системы: Google Sans (подмена /product выключена)"
+    fi
     echo ""
     echo "  обычный 400 -> $(axis_of 400 "$s")"
     echo "  тонкий  100 -> $(axis_of 100 "$s")"
@@ -32,6 +38,19 @@ case "$1" in
         fi
         set_shift "$2"
         echo "сдвиг сохранён: +$(get_shift)"
+        echo "применится после перезагрузки"
+        exit 0
+        ;;
+    unify)
+        case "$2" in
+            on|1)  set_unify 1; echo "подмена /product включена" ;;
+            off|0) set_unify 0; echo "подмена /product выключена" ;;
+            *)
+                echo "включено" ; [ "$(get_unify)" = "1" ] || echo "выключено"
+                echo "  usage: action.sh unify on|off"
+                exit 1
+                ;;
+        esac
         echo "применится после перезагрузки"
         exit 0
         ;;
