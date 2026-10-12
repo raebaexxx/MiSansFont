@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MiSans — толщина</title>
+<title>MiSans — weight</title>
 <style>
   :root {
     --bg:#121212; --card:#1e1e1e; --card2:#2a2a2a; --fg:#ececec; --dim:#9a9a9a;
@@ -56,53 +56,46 @@
   .rows b { color:var(--fg); font-weight:500; }
   .st { margin-top:10px; font-size:12px; color:var(--dim); min-height:17px; }
   .st.err { color:#ff8a80; }
-  .ver { text-align:center; font-size:11px; color:var(--dim); margin-top:18px; }
+.ver { text-align:center; font-size:11px; color:var(--dim); margin-top:18px; }
 </style>
 </head>
 <body>
 
-<h1>MiSans — толщина шрифта</h1>
+<h1>MiSans — font weight</h1>
 <div class="sub">
-  Сдвиг вписывается прямо в конфигурацию шрифтов, поэтому работает везде,
-  включая приложения, которые задают шрифт мимо TextView.
-  Ось MiSans кончается на 700 — выше неё толщина не растёт.
+  The shift is written into the font configuration, so it reaches every app
+  including the ones that pick a font outside <span style="font-family:monospace">TextView</span>.
+  The MiSans weight axis ends at 700 — it does not get heavier beyond that.
 </div>
 
 <div class="warn">
-  Вступает в силу <b>только после перезагрузки</b>. Конфигурация шрифтов
-  читается один раз при старте, обновления на лету нет.
+  Takes effect <b>after a reboot</b>. The font configuration is read once at
+  boot, there is no live update.
 </div>
 
 <div class="card">
-  <div class="val"><b id="num">300</b><span id="hint">максимум</span></div>
+  <div class="val"><b id="num">300</b><span id="hint">maximum</span></div>
   <input type="range" id="sl" min="0" max="300" step="10" value="300">
   <div class="chips" id="chips"></div>
 </div>
 
-<button class="btn" id="apply">Сохранить</button>
-<button class="btn ghost" id="reload">Прочитать текущее</button>
-<button class="btn ghost" id="reboot">Сохранить и перезагрузить</button>
+<button class="btn" id="apply">Save</button>
+<button class="btn ghost" id="reload">Reload current</button>
+<button class="btn ghost" id="reboot">Save and reboot</button>
 <div class="st" id="st"></div>
 
 <div class="card">
-  <div class="rows" style="margin-bottom:12px">
-    <div><span>Интерфейс системы</span><b id="unifyState">—</b></div>
-  </div>
-  <button class="btn ghost" id="unify" style="margin:0">Переключить</button>
-  <div class="st" id="unifySt"></div>
-</div>
-
-<div class="card">
   <div class="prev">
-    <div class="a">Толщина текста <mark>сейчас</mark></div>
-    <div class="b">Обычный текст, 19px, как в списках и чатах</div>
-    <div class="c">Подпись 13px — как в настройках. Здесь рисуется текущим системным шрифтом.</div>
+    <div class="a">Text weight <mark>right now</mark></div>
+    <div class="b">Regular text, 19px, as in lists and chats</div>
+    <div class="c">Caption at 13px, as in Settings. Drawn with the current system font.</div>
   </div>
 </div>
 
 <div class="card rows" id="rows"></div>
 
-<div class="ver" id="ver">webroot v4.1 · загружено</div>
+
+<div class="ver" id="ver">webroot v5.3 · loaded</div>
 
 <script>
 let cbSeq = 0;
@@ -137,9 +130,9 @@ function render() {
   $('num').textContent = v;
   $('sl').style.setProperty('--p', (v / 300 * 100) + '%');
   var hint;
-  if (v >= 300) hint = 'обычный текст станет 700';
-  else if (v === 0) hint = 'обычный MiSans, без сдвига';
-  else hint = 'обычный текст станет ' + axisOf(400, v);
+  if (v >= 300) hint = 'regular text becomes 700';
+  else if (v === 0) hint = 'plain MiSans, no shift';
+  else hint = 'regular text becomes ' + axisOf(400, v);
   $('hint').textContent = hint;
   var chips = document.querySelectorAll('.chip');
   for (var i = 0; i < chips.length; i++) {
@@ -149,8 +142,8 @@ function render() {
 }
 
 function rows(v) {
-  var list = [['тонкий 100', 100], ['лёгкий 300', 300], ['обычный 400', 400],
-              ['средний 500', 500], ['жирный 700', 700]];
+  var list = [['light 100', 100], ['regular 300', 300], ['regular 400', 400],
+              ['medium 500', 500], ['bold 700', 700]];
   var html = '';
   for (var i = 0; i < list.length; i++) {
     html += '<div><span>' + list[i][0] + '</span><b>→ ' +
@@ -186,29 +179,28 @@ function readUnify() {
   return exec('cat /data/adb/misans/unify 2>/dev/null').then(function (r) {
     var v = parseInt((r.stdout || '').trim(), 10);
     $('unifyState').textContent = (v === 0) ? 'Google Sans' : 'MiSans';
-    $('unify').textContent = (v === 0) ? 'Включить MiSans' : 'Вернуть Google Sans';
+    $('unify').textContent = (v === 0) ? 'Switch to MiSans' : 'Restore Google Sans';
   }).catch(function () {
-    $('unifyState').textContent = 'неизвестно';
+    $('unifyState').textContent = 'unknown';
   });
 }
 
 function toggleUnify() {
-  var cur = $('unifyState').textContent === 'MiSans';
-  var next = cur ? 'off' : 'on';
+  var next = $('unifyState').textContent === 'MiSans' ? 'off' : 'on';
   $('unifySt').className = 'st';
-  $('unifySt').textContent = 'Сохраняю…';
+  $('unifySt').textContent = 'Saving…';
   exec('sh /data/adb/modules/misans/action.sh unify ' + next).then(function (r) {
     $('unifySt').className = 'st' + (+r.errno === 0 ? '' : ' err');
     if (+r.errno !== 0) {
-      $('unifySt').textContent = 'Ошибка ' + r.errno + ': ' + (r.stderr || r.stdout || 'нет вывода');
+      $('unifySt').textContent = 'Error ' + r.errno + ': ' + (r.stderr || r.stdout || 'no output');
       return;
     }
-    $('unifySt').textContent = 'Сохранено. Вступит в силу после перезагрузки.';
-    toast(next === 'on' ? 'MiSans в интерфейсе' : 'Google Sans в интерфейсе');
+    $('unifySt').textContent = 'Saved. Takes effect after a reboot.';
+    toast(next === 'on' ? 'MiSans in the interface' : 'Google Sans in the interface');
     readUnify();
   }).catch(function (e) {
     $('unifySt').className = 'st err';
-    $('unifySt').textContent = 'Не удалось выполнить: ' + e;
+    $('unifySt').textContent = 'Could not run: ' + e;
   });
 }
 
@@ -216,24 +208,24 @@ function save(rebootAfter) {
   var v = $('sl').value;
   $('apply').disabled = true;
   $('st').className = 'st';
-  $('st').textContent = 'Сохраняю…';
+  $('st').textContent = 'Saving…';
   exec('sh /data/adb/modules/misans/action.sh set ' + v).then(function (r) {
     $('st').className = 'st' + (+r.errno === 0 ? '' : ' err');
     if (+r.errno !== 0) {
-      $('st').textContent = 'Ошибка ' + r.errno + ': ' + (r.stderr || r.stdout || 'нет вывода');
+      $('st').textContent = 'Error ' + r.errno + ': ' + (r.stderr || r.stdout || 'no output');
       $('apply').disabled = false;
       return;
     }
     if (!rebootAfter) {
-      $('st').textContent = 'Сохранено: +' + v + '. Вступит в силу после перезагрузки.';
-      toast('Сохранено: +' + v);
+      $('st').textContent = 'Saved: +' + v + '. Takes effect after a reboot.';
+      toast('Saved: +' + v);
     } else {
-      $('st').textContent = 'Сохранено: +' + v + '. Перезагружаю…';
+      $('st').textContent = 'Saved: +' + v + '. Rebooting…';
       return exec('svc power reboot');
     }
   }).catch(function (e) {
     $('st').className = 'st err';
-    $('st').textContent = 'Не удалось выполнить: ' + e;
+    $('st').textContent = 'Could not run: ' + e;
     $('apply').disabled = false;
   });
 }
@@ -247,13 +239,13 @@ $('unify').onclick = toggleUnify;
 
 if (typeof ksu === 'undefined') {
   $('st').className = 'st err';
-  $('st').textContent = 'Страница открыта вне KernelSU — команды недоступны.';
+  $('st').textContent = 'Opened outside KernelSU — commands are unavailable.';
   render();
 } else {
   try { if (ksu.enableEdgeToEdge) ksu.enableEdgeToEdge(true); } catch (e) {}
   readCur();
   readUnify();
-  $('ver').textContent = 'webroot v5.1 · скрипт выполнен';
+  $('ver').textContent = 'webroot v5.3 · script finished';
 }
 </script>
 </body>

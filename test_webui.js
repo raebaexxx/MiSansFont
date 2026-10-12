@@ -71,32 +71,33 @@ async function press(id) {
   await tick();
 }
 const text = id => els[id].textContent || '';
-const failed1 = s => /Не удалось|Ошибка/.test(s);
 
 (async () => {
   await tick();
   check('shift read back', String(els['sl'].value) === '300', els['sl'].value);
   check('weight table filled', els['rows'].innerHTML.length > 50);
+  check('hint rendered', text('hint').length > 0, text('hint'));
 
   await press('apply');
-  check('save reports success', /Сохранено/.test(text('st')), text('st'));
-  check('save not flagged as error', !failed1(text('st')) && els['st'].className === 'st',
-        els['st'].className);
+  check('save reports success', /Saved/.test(text('st')), text('st'));
+  check('save not flagged as error', els['st'].className === 'st', els['st'].className);
   check('save ran action.sh',
         calls.some(c => c[1] === 'sh /data/adb/modules/misans/action.sh set 300'));
 
   calls.length = 0;
   await press('reboot');
-  check('reboot path saves', /Перезагружаю/.test(text('st')), text('st'));
+  check('reboot path saves', /Rebooting/.test(text('st')), text('st'));
   check('reboot command sent', calls.some(c => /power reboot/.test(c[1] || '')));
 
   calls.length = 0;
   await press('unify');
   check('unify toggle state read', text('unifyState') === 'MiSans', text('unifyState'));
-  check('unify toggle reports success', /Сохранено/.test(text('unifySt')), text('unifySt'));
+  check('unify toggle reports success', /Saved/.test(text('unifySt')), text('unifySt'));
   check('unify toggle sends command',
         calls.some(c => /action\.sh unify/.test(c[1] || '')),
         (calls.find(c => /unify/.test(c[1] || '')) || [])[1] || 'none');
+
+  check('no Cyrillic left in the UI', !/[Ѐ-ӿ]/.test(html));
 
   console.log(failed ? '\n  FAIL' : '\n  PASS');
   process.exit(failed ? 1 : 0);
