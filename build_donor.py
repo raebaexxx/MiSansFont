@@ -1,26 +1,41 @@
 #!/usr/bin/env python3
 """Builds the glyph donor shipped as system/fonts/RobotoStatic-Regular.ttf.
 
-MiSans is a Latin subset: no combining-extended marks (U+1AB0-U+1AFF), thin
-Greek and Cyrillic extension coverage, and the interface font Google Sans Flex
-has no Cyrillic at all. No MiSans file in the stock ROM covers those ranges --
-verified across all 25 of them, 0 of 80 for U+1AB0-U+1AFF.
+MiSans is a Latin subset: it has no vulgar fractions, thin Greek and Cyrillic
+extension coverage, and almost no Latin Extended Additional. The interface
+font Google Sans Flex is worse, 535 glyphs with no Cyrillic at all. Glyphs they
+do not draw fall back, and before this donor the general chain had no second
+Latin font, so the fallback found nothing and drew a box. Gboard's long press
+on a digit showed them: 1/5, 1/6 and 5/6 came out as empty frames.
 
-RobotoStatic-Regular.ttf, which stock Android already ships in /system, covers
-all of it. Adding it to the fallback chain fixes the tofu boxes, but minikin
-opens fallback files lazily on first use: the 306 KB original made the quick
-settings date land after the expand animation.
+RobotoStatic-Regular.ttf, already in stock /system, covers them. It is subset
+to just the codepoints nothing else provides.
 
-So the donor is subset down to only the codepoints that nothing else provides.
-1728 that RobotoStatic adds over MiSans, but the existing chain already covers
-1156 of them, so only 572 actually rendered as boxes. 59 KB instead of 306 KB,
-and five times less to parse.
+Sizing matters. minikin opens fallback files lazily on first use, and that
+happens on the UI thread during the first quick settings shade expand: the
+full 306 KB donor made the shade date land after the animation. Subsetting to
+the 1669 codepoints that are genuinely needed keeps the file small enough
+that opening it is not noticeable.
 
-The donor stays last in the chain, so it is consulted only when no other font
-has the glyph, and only those rare characters are affected.
+READING THE CHAIN IS THE SUBTLE PART. Almost every font in font_fallback.xml
+looks like it belongs to the general fallback, but only fonts in nameless
+<family> blocks do, plus the first named family:
 
-Usage:  build_donor.py <chain-fonts-list> <RobotoStatic-Regular.ttf> <out.ttf>
+    if (name == null) { families.add(family); }
+    else if (firstFamily) { families.addAll(namedFamilyList.getFamilies()); }
+
+Fonts inside <family name="source-sans-pro"> and friends sit in a map keyed by
+name and are never consulted for sans-serif. Counting all 198 files in the file
+as the chain makes the donor far too small -- that is what produced 572
+glyphs instead of 1669, and it is why the vulgar fractions ended up missing.
+
+The donor is static, so its glyphs render at weight 400 while MiSans follows
+the shift. Only visible in text that uses those characters.
+
+Usage:  build_donor.py <font_fallback.xml> <fontdir> <RobotoStatic-Regular.ttf> <out.ttf>
 """
+import re
+import os
 import sys
 import unicodedata
 from collections import Counter
@@ -29,7 +44,7 @@ from fontTools.subset import Options, Subsetter
 from fontTools.ttLib import TTFont
 
 MIFONT = 'system/fonts/Roboto-Regular.ttf'
-
+DONOR_NAME = 'RobotoStatic-Regular.ttf'
 
 def codepoints(path):
     try:
@@ -42,23 +57,43 @@ def codepoints(path):
     except Exception:
         return set()
 
+def general_chain(xml_path, fontdir):
+    """Fonts reachable as fallback from any family: nameless <family> blocks
+    plus the first named one. Mirrors FontListParser.readFamilies."""
+    xml = open(xml_path, encoding='utf-8').read()
+    inner = xml[xml.index('<familyset>') + len('<familyset>'): xml.rindex('</familyset>')]
+    names, took_first = [], False
+    for attrs, body in re.findall(r'<family\b([^>]*)>(.*?)</family>', inner, re.S):
+        fonts = re.findall(r'>([A-Za-z0-9_.-]+\.(?:ttf|otf|ttc))<', body)
+        if 'name=' not in attrs:
+            names += fonts
+        elif not took_first:
+            names += fonts
+            took_first = True
+    # the donor must not count itself, or it cancels out
+    return sorted({n for n in names if n != DONOR_NAME}), fontdir
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         sys.exit(__doc__)
-    chain_list, donor_in, out = sys.argv[1], sys.argv[2], sys.argv[3]
+    chain_xml, fontdir, donor_in, out = sys.argv[1:5]
+
+    chain, _ = general_chain(chain_xml, fontdir)
+    covered = set()
+    missing = []
+    for n in chain:
+        p = os.path.join(fontdir, n)
+        if not os.path.exists(p):
+            missing.append(n)
+            continue
+        covered |= codepoints(p)
 
     mine = codepoints(MIFONT)
-    covered = set()
-    with open(chain_list, encoding='utf-8') as fh:
-        for line in fh:
-            name = line.strip()
-            if name:
-                covered |= codepoints(name)
     need = (codepoints(donor_in) - mine) - covered
-    print(f"  base font:  {len(mine)} codepoints")
-    print(f"  chain:      {len(covered)}")
-    print(f"  donor adds: {len(need)} codepoints nothing else has")
+    print(f"  chain fonts reachable as fallback: {len(chain)} (not found on disk: {len(missing)})")
+    print(f"  chain covers:  {len(covered)} codepoints")
+    print(f"  MiSans has:   {len(mine)}")
+    print(f"  donor must add: {len(need)}")
 
     blocks = Counter()
     for c in need:
@@ -66,7 +101,7 @@ def main():
             blocks[unicodedata.name(chr(c)).split()[0]] += 1
         except Exception:
             blocks['?'] += 1
-    for name, count in blocks.most_common(6):
+    for name, count in blocks.most_common(8):
         print(f"      {name:28} {count}")
 
     font = TTFont(donor_in)
@@ -79,24 +114,22 @@ def main():
     ss.populate(unicodes=need)
     ss.subset(font)
 
-    # Names stay as they are: the XML resolves the file by name, and a
-    # mismatch makes the font map fail to resolve it.
+    # Names must stay: the XML resolves the file by name.
     n = font['name']
     n.setName('RobotoStatic', 1, 3, 1, 0x409)
     n.setName('RegularStatic', 2, 3, 1, 0x409)
-    n.setName('RobotoStatic-Regular', 4, 3, 1, 0x409)
-    n.setName('RobotoStatic-Regular', 6, 3, 1, 0x409)
+    n.setName(DONOR_NAME, 4, 3, 1, 0x409)
+    n.setName(DONOR_NAME, 6, 3, 1, 0x409)
     font.save(out)
 
     check = TTFont(out)
     got = set()
     for t in check['cmap'].tables:
         got |= set(t.cmap.keys())
-    print(f"  written: {out}")
+    print(f"  written {out}: {os.path.getsize(out)} bytes")
     print(f"  codepoints kept: {len(got)}   lost: {len(need - got)}")
-    print(f"  PostScript name: {check['name'].getDebugName(6)}")
-    print(f"  variable: {'yes' if 'fvar' in check else 'no, static'}")
-
+    for c in (0x2150, 0x2155, 0x2159, 0x215A, 0x1E9C, 0x1AB0):
+        print(f"    U+{c:04X} present: {'yes' if c in got else 'NO'}")
 
 if __name__ == '__main__':
     main()

@@ -1,6 +1,6 @@
 id=misans
 name=MiSans System Font
-version=v5.3
-versionCode=63
+version=v5.4
+versionCode=64
 author=raebaexxx
 description=Replaces Roboto with MiSans system-wide, including the PixelOS interface and status bar clock. Weight is a shift written into the font configuration, so the slider reaches every app. Adjust in the module web UI; a reboot is required.

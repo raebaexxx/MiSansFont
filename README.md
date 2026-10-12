@@ -180,7 +180,44 @@ MiSans. There is also a toggle in the web UI.
 VFS rules are runtime-only and never written to disk, so a reboot is always a
 way back to stock even without the switch.
 
+## Glyph coverage
+
+MiSans is a Latin subset: no vulgar fractions, thin Greek and Cyrillic
+extension coverage, and little Latin Extended Additional. The interface font
+Google Sans Flex is worse — 535 glyphs, Latin and digits, no Cyrillic at all.
+Glyphs they do not draw fall back.
+
+`system/fonts/RobotoStatic-Regular.ttf` is RobotoStatic, already present in
+stock `/system`, subset to the codepoints that MiSans lacks and nothing else
+in the fallback chain provides. It is last in the chain, so it is consulted
+only when no other font has the glyph. `build_donor.py` regenerates it.
+
+**Reading the chain is the subtle part.** Almost every font in
+`font_fallback.xml` looks like it belongs to the general fallback, but only
+fonts in nameless `<family>` blocks do, plus the first named family:
+
+```java
+// FontListParser.readFamilies
+if (name == null) { families.add(family); }
+else if (firstFamily) { families.addAll(namedFamilyList.getFamilies()); }
+```
+
+Fonts inside `<family name="source-sans-pro">` sit in a map keyed by name and
+are never consulted for `sans-serif`. Counting all 198 files in the file as
+the chain makes the donor far too small — it drops the vulgar fractions Gboard
+shows on the digit keys.
+
 ## Known limits
+
+**The first quick settings shade expand after boot can lag.** minikin opens
+fallback fonts lazily, on first use, on the UI thread. The quick settings
+header is built when the shade first opens, and laying out its text opens the
+donor. With the interface substitution on it is noticeable for roughly half a
+second.
+
+A smaller donor avoids it, but only when the interface substitution is off.
+With it on the lag is there either way, so the module ships full coverage
+rather than trading it for speed that does not materialise.
 
 **Apps with their own bundled font** are not affected. An app that ships a
 `.ttf` in assets and asks for it by name bypasses the configuration. Stock
