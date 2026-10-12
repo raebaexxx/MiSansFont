@@ -209,15 +209,24 @@ shows on the digit keys.
 
 ## Known limits
 
-**The first quick settings shade expand after boot can lag.** minikin opens
-fallback fonts lazily, on first use, on the UI thread. The quick settings
-header is built when the shade first opens, and laying out its text opens the
-donor. With the interface substitution on it is noticeable for roughly half a
-second.
+**The first quick settings shade expand after boot can occasionally lag.**
+minikin opens fallback files lazily, on first use, on the UI thread, and the
+quick settings header is built at the moment the shade first opens.
 
-A smaller donor avoids it, but only when the interface substitution is off.
-With it on the lag is there either way, so the module ships full coverage
-rather than trading it for speed that does not materialise.
+How often this happens is not predictable. A 306 KB donor made the shade date
+land after the animation, and a 61 KB one did it with the interface
+substitution off. But the same 61 KB donor did lag with the substitution on,
+and the full 160 KB donor does not lag at all. Since the size of the donor
+does not explain it, the module ships full glyph coverage.
+
+If you hit the lag, turning the interface substitution off is the thing that
+reliably avoids it:
+
+```bash
+su -c 'sh /data/adb/modules/misans/action.sh unify off'
+```
+
+Apps stay on MiSans either way.
 
 **Apps with their own bundled font** are not affected. An app that ships a
 `.ttf` in assets and asks for it by name bypasses the configuration. Stock
