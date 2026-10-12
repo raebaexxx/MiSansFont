@@ -621,6 +621,15 @@
   <family lang="und-Yezi">
     <font supportedAxes="wght" postScriptName="NotoSerifYezidi-Regular">NotoSerifYezidi-VF.ttf</font>
   </family>
+  <!-- Glyphs MiSans does not draw. MiSans is a Latin subset: no
+       combining-extended marks, thin Greek and Cyrillic extension coverage.
+       This file is the stock RobotoStatic subset down to only the codepoints
+       no other font in the chain provides, so it stays small and is opened
+       only when nothing else has the glyph. Placed last for that reason.
+       Static, so these glyphs render at weight 400. -->
+  <family>
+    <font weight="400" style="normal" postScriptName="RobotoStatic-Regular">RobotoStatic-Regular.ttf</font>
+  </family>
   <alias name="arial" to="sans-serif"/>
   <alias name="helvetica" to="sans-serif"/>
   <alias name="tahoma" to="sans-serif"/>

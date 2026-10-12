@@ -112,7 +112,16 @@
 
 
     <!-- Note that aliases must come after the fonts they reference. -->
-    <alias name="sans-serif-thin" to="sans-serif" weight="100" />
+    <!-- Glyphs MiSans does not draw. MiSans is a Latin subset: no
+       combining-extended marks, thin Greek and Cyrillic extension coverage.
+       This file is the stock RobotoStatic subset down to only the codepoints
+       no other font in the chain provides, so it stays small and is opened
+       only when nothing else has the glyph. Placed last for that reason.
+       Static, so these glyphs render at weight 400. -->
+  <family>
+    <font weight="400" style="normal" postScriptName="RobotoStatic-Regular">RobotoStatic-Regular.ttf</font>
+  </family>
+  <alias name="sans-serif-thin" to="sans-serif" weight="100" />
     <alias name="sans-serif-light" to="sans-serif" weight="300" />
     <alias name="sans-serif-medium" to="sans-serif" weight="500" />
     <alias name="sans-serif-black" to="sans-serif" weight="900" />
